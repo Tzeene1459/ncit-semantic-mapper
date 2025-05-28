@@ -1,0 +1,13 @@
+[project]
+name = "si-tamer"
+version = "0.0.1"
+dependencies = [
+    "langchain>=0.3.21",
+    "langchain-core>=0.3.48",
+    "langchain-neo4j>=0.4.0",
+    "langchain-openai>=0.3.10",
+    "neo4j-graphrag>=1.6.0",
+    "numpy>=2.2.4",
+    "pytest>=8.3.5",
+    "python-dotenv>=1.1.0",
+]
