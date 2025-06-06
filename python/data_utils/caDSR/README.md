@@ -14,13 +14,13 @@ echo cadsr-dde.sql | sqlite3 vms.db
 # as specified in the XML.
 python parse-cde-xml-into-sqlite.py
  
-* Create the nodes in Neo4j using the SQLite database.
+# Create the nodes in Neo4j using the SQLite database.
 python add-tables.py
  
-* Add the relationships between nodes in Neo4j.
+# Add the relationships between nodes in Neo4j.
 python add-relationships.py
  
-* Compute and add the vector embeddings to relevant nodes.
+# Compute and add the vector embeddings to relevant nodes.
 python vectorize-cdes-sqlite.py
 ```
 
