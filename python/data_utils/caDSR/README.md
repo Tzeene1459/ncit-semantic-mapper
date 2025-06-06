@@ -6,7 +6,7 @@ The steps are as follows (assumes creating db from scratch):
 
 ```shell
 # Create the intermediate [SQLite](https://sqlite.org) local database.
-echo cadsr-dde.sql | sqlite3 vms.db
+cat cadsr-dde.sql | sqlite3 vms.db
  
 # Parse the XML and store the caDSR entities (CDE, DEC, OB, PR, VDM, PV) in 
 # corresponding  SQLite tables (`vms.db`). This step also standardizes the names 
