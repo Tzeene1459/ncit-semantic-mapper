@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 
 from synonym_tool import get_synonyms
 from exact_match import get_node_match
+from semantic_retrievers import SemanticSearcher
+
 
 class Config:
     NEO4J_URI = os.getenv("NEO4J_URI")
@@ -80,7 +82,7 @@ class SynonymFinderTool(BaseTool):
 class SynonymByCodeTool(BaseTool):
     name: str = "synonym_by_code"
     description: str = """
-    Useful for finding synonyms using an NCIT code (like C4878).
+    Useful for finding synonyms using an NCIT code (like C4890).
     Use this tool when the input is an NCIT code starting with 'C'.
     Returns synonyms associated with that specific code when an exact match for the code cannot be found in the database.
     """
@@ -117,7 +119,7 @@ class NodeMatcherTool(BaseTool):
     name: str = "node_matcher"
     description: str = """
     Useful for finding exact node information by NCIT code. This tool is used to find the exact match in the database for the given code.
-    Use this tool if the input is an NCIT code like 'C4878'.
+    Use this tool if the input is an NCIT code like 'C2357'.
     Returns detailed information about the node including term, definition, type.
     """
     args_schema: type[BaseModel] = QueryInput
@@ -185,6 +187,110 @@ class TermMatcherTool(BaseTool):
     ) -> str:
         return self._run(query, run_manager=run_manager.get_sync() if run_manager else None)
 
+class SemanticPVSearchTool(BaseTool):
+    name: str = "semantic_pv_search"
+    description: str = """
+    Useful for finding semantically similar CDEs through permissible value matching.
+    Use this tool when exact matches and synonyms fail, and you need to find related medical concepts.
+    This performs vector-based semantic search on PV terms to find similar permissible values and their associated CDEs.
+    Best for general medical terms like 'blood pressure', 'cancer staging', 'diabetes symptoms'.
+    Returns similarity scores and related CDE information.
+    """
+    args_schema: type[BaseModel] = QueryInput
+    
+    def _run(
+        self, 
+        query: str, 
+        run_manager: Optional[CallbackManagerForToolRun] = None
+    ) -> str:
+        try:
+            searcher = SemanticSearcher()
+            results = searcher.find_cde_from_pv_term(query.strip(), top_k=3)
+            searcher.close()
+            
+            if not results:
+                return f"No semantic matches found for PV term '{query}'"
+            
+            response_parts = [f"Found {len(results)} semantic matches for '{query}' through PV search:"]
+            
+            for i, result in enumerate(results, 1):
+                metadata = result['metadata']
+                score = metadata['score']
+                pv_term = metadata['pv_term']
+                pv_code = metadata['pv_code']
+                cde_term = metadata['cde_term']
+                cde_code = metadata['cde']
+                
+                response_parts.append(
+                    f"\n{i}. PV: '{pv_term}' (Code: {pv_code}) -> CDE: '{cde_term}' (Code: {cde_code}) [Similarity: {score:.4f}]"
+                )
+            
+            return "".join(response_parts)
+            
+        except Exception as e:
+            return f"Error in semantic PV search: {str(e)}"
+    
+    async def _arun(
+        self, 
+        query: str, 
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None
+    ) -> str:
+        return self._run(query, run_manager=run_manager.get_sync() if run_manager else None)
+
+class SemanticNCITSearchTool(BaseTool):
+    name: str = "semantic_ncit_search"
+    description: str = """
+    Useful for finding semantically similar CDEs through NCIT term concept matching.
+    Use this tool when exact matches and synonyms fail, and you need to find related standardized medical concepts.
+    This performs vector-based semantic search on NCIT terms to find similar concepts and their associated PVs and CDEs.
+    Best for standardized medical terminology like 'hypertension', 'neoplasm', 'anatomical structures'.
+    Returns similarity scores and comprehensive relationship information.
+    """
+    args_schema: type[BaseModel] = QueryInput
+    
+    def _run(
+        self, 
+        query: str, 
+        run_manager: Optional[CallbackManagerForToolRun] = None
+    ) -> str:
+        try:
+            searcher = SemanticSearcher()
+            results = searcher.find_cde_from_ncit_term(query.strip(), top_k=3)
+            searcher.close()
+            
+            if not results:
+                return f"No semantic matches found for NCIT term '{query}'"
+            
+            response_parts = [f"Found {len(results)} semantic matches for '{query}' through NCIT search:"]
+            
+            for i, result in enumerate(results, 1):
+                metadata = result['metadata']
+                score = metadata['score']
+                concept_term = metadata['concept_term']
+                concept_code = metadata['concept_code']
+                pv_term = metadata['pv_term']
+                pv_code = metadata['pv_code']
+                cde_codes = metadata['of_cdes']
+                
+                cde_summary = f"{len(cde_codes)} CDEs" if cde_codes else "No CDEs"
+                
+                response_parts.append(
+                    f"\n{i}. NCIT: '{concept_term}' (Code: {concept_code}) -> PV: '{pv_term}' (Code: {pv_code}) -> {cde_summary} [Similarity: {score:.4f}]"
+                )
+            
+            return "".join(response_parts)
+            
+        except Exception as e:
+            return f"Error in semantic NCIT search: {str(e)}"
+    
+    async def _arun(
+        self, 
+        query: str, 
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None
+    ) -> str:
+        return self._run(query, run_manager=run_manager.get_sync() if run_manager else None)
+
+
 def create_fresh_agent():
     """Create and configure the LangChain agent"""
     
@@ -195,11 +301,18 @@ def create_fresh_agent():
     
     # adding tools
     tools = [
-        SynonymFinderTool(),
-        SynonymByCodeTool(),
-        NodeMatcherTool(),
-        TermMatcherTool()
-    ]
+    # Exact match tools (highest priority)
+    TermMatcherTool(),
+    NodeMatcherTool(),
+    
+    # Synonym tools (medium priority) 
+    SynonymFinderTool(),
+    SynonymByCodeTool(),
+    
+    # Semantic search tools (fallback)
+    SemanticPVSearchTool(),
+    SemanticNCITSearchTool()
+]
     
     # creating fresh memory instance 
     fresh_memory = ConversationBufferMemory(
@@ -214,16 +327,23 @@ def create_fresh_agent():
     
     IMPORTANT: Focus ONLY on the current input. Do not reference previous queries or results.
 
-    Available Tools:
-    - term_matcher: Find exact matches for term names like "Prostate" or "Lung Cancer". Stop here if a match is found.
-    - node_matcher: Find exact matches for NCIT codes like "C4878" or "C14201". Stop here if a match is found.
-    - synonym_finder: Find synonyms for permissible values when exact matches fail. Stop here if synonyms are found.
-    - synonym_by_code: Find synonyms using NCIT codes when exact matches fail. Stop here if synonyms are found. 
+    Available Tools (in order of preference):
+    1. EXACT MATCH TOOLS (use first):
+       - term_matcher: Find exact matches for term names
+       - node_matcher: Find exact matches for NCIT codes
+    
+    2. SYNONYM TOOLS (use if exact match fails):
+       - synonym_finder: Find synonyms for permissible values 
+       - synonym_by_code: Find synonyms using NCIT codes
+    
+    3. SEMANTIC SEARCH TOOLS (use as fallback):
+       - semantic_pv_search: Find semantically similar terms through PV matching
+       - semantic_ncit_search: Find semantically similar terms through NCIT concept matching
     
     Examples of proper tool usage:
-    - For "Lung Cancer": use term_matcher first, then synonym_finder if no match
-    - For "C4878": use node_matcher 
-    - For "prostate": use term_matcher first, then synonym_finder if no match
+    - For a term: term_matcher -> synonym_finder -> semantic_ncit_search
+    - For a code that starts with C: node_matcher -> synonym_by_code  
+    - For a set of strings or phrase: term_matcher -> semantic_pv_search -> semantic_ncit_search
 
     Always provide:
     - The recommended NCIT code and term (if found)
@@ -251,7 +371,7 @@ def create_fresh_agent():
         agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5,
+        max_iterations=7,
         memory = fresh_memory
     )
     

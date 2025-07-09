@@ -14,6 +14,7 @@ This toolkit is part of the broader [SI Tamer](https://github.com/CBIIT/si-tamer
 
 - **Exact Term Matching**: Find precise matches for NCIT codes and term names
 - **Synonym Discovery**: Locate synonyms for permissible values and NCIT codes
+- **Semantic Search with Embeddings**: Search embedding based semantic matches for permissible values and NCIT terms
 - **LangChain Integration**: AI-powered semantic mapping using OpenAI models used as an Agent
 - **Modular Architecture**: Separate tools for different types of queries
 - **Environment-based Configuration**: Secure credential management
@@ -23,14 +24,16 @@ This toolkit is part of the broader [SI Tamer](https://github.com/CBIIT/si-tamer
 ```
 kg-toolkit/
 ├── core_tools/
-│   ├── exact_match.py      # Exact node matching functionality
-│   ├── llm_agent.py        # LangChain agent for AI-powered mapping
-│   └── synonym_tool.py     # Synonym finding capabilities
+│   ├── exact_match.py                # Exact node matching functionality
+│   ├── llm_agent.py                  # LangChain agent for AI-powered mapping
+│   ├── semantic_retrievers.py        # Semantic search algorithm   
+│   └── synonym_tool.py               # Synonym finding capabilities
 └── tests/
-    ├── connection_test.py   # Neo4j connection verification
-    ├── gds_querying.py     # Graph Data Science queries
-    ├── test_exact_match.py # Test suite for exact matching
-    └── test_synonyms.py    # Test suite for synonym finding
+    ├── connection_test.py          # Neo4j connection verification
+    ├── gds_querying.py             # Graph Data Science queries
+    ├── test_exact_match.py         # Test suite for exact matching
+    ├── test_semantic_retrievers.py # Test suite for semantic matching
+    └── test_synonyms.py            # Test suite for synonym finding
 ```
 
 ## Core Components
@@ -58,6 +61,19 @@ Handles synonym discovery for permissible values and NCIT concepts.
 **Main Classes:**
 - `get_synonyms`: Primary class for synonym finding operations
 
+### `semantic_retrievers.py`
+Provides semantic matching capabilities for NCIT nodes and PV nodes in the knowledge graph.
+This logic is inspired by the original [SI Tamer](https://github.com/CBIIT/si-tamer) toolset. 
+
+**Key Features:**
+- Turn PV or NCIT term into openAI embedding
+- Match nodes by similarity search using embeddings metadata against the input embedding 
+- Retrieve comprehensive node information including all metadata
+- Rank results based on similarity scores
+
+**Main Classes:**
+- `SemanticSearcher`: Primary class for semantic matching operations for both PVs and NCIT terms
+
 ### `llm_agent.py`
 LangChain-powered intelligent agent for semantic mapping with AI reasoning.
 
@@ -72,6 +88,8 @@ LangChain-powered intelligent agent for semantic mapping with AI reasoning.
 - `SynonymByCodeTool`: Code-based synonym discovery
 - `NodeMatcherTool`: Exact node matching by NCIT code
 - `TermMatcherTool`: Exact node matching by term name
+- `SemanticPVSearchTool`: Semantic search using PV embedding
+- `SemanticNCITSearchTool`: Semantic search using NCIT term embedding
 
 ## Database Schema
 
