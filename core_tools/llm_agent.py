@@ -13,6 +13,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
+from langchain.memory import ConversationBufferMemory
 from pydantic import BaseModel, Field
 
 from synonym_tool import get_synonyms
@@ -45,7 +46,7 @@ class SynonymFinderTool(BaseTool):
     name: str = "synonym_finder"
     description: str = """
     Useful for finding synonyms of a given permissible value (PV) term.
-    Input should be a term like 'prostate', 'lung cancer', etc.
+    Use this tool when the input is a permissible value like 'prostata' or 'M0'.
     Returns a list of synonyms for these permissible values from the knowledge graph, when an exact match cannot be found.
     """
     args_schema: type[BaseModel] = QueryInput
@@ -80,7 +81,7 @@ class SynonymByCodeTool(BaseTool):
     name: str = "synonym_by_code"
     description: str = """
     Useful for finding synonyms using an NCIT code (like C4878).
-    Input should be an NCIT code starting with 'C'.
+    Use this tool when the input is an NCIT code starting with 'C'.
     Returns synonyms associated with that specific code when an exact match for the code cannot be found in the database.
     """
     args_schema: type[BaseModel] = QueryInput
@@ -116,7 +117,7 @@ class NodeMatcherTool(BaseTool):
     name: str = "node_matcher"
     description: str = """
     Useful for finding exact node information by NCIT code. This tool is used to find the exact match in the database for the given code.
-    Input should be an NCIT code like 'C4878'.
+    Use this tool if the input is an NCIT code like 'C4878'.
     Returns detailed information about the node including term, definition, type.
     """
     args_schema: type[BaseModel] = QueryInput
@@ -152,7 +153,7 @@ class TermMatcherTool(BaseTool):
     name: str = "term_matcher"
     description: str = """
     Useful for finding exact node information by term name. This tool is used to find the exact match in the database for the given term name.
-    Input should be a term like 'Lung Carcinoma'.
+    Use this tool when the input is a term like 'Lung Carcinoma'.
     Returns detailed information including NCIT code, definition, type.
     """
     args_schema: type[BaseModel] = QueryInput
@@ -184,7 +185,7 @@ class TermMatcherTool(BaseTool):
     ) -> str:
         return self._run(query, run_manager=run_manager.get_sync() if run_manager else None)
 
-def create_agent():
+def create_fresh_agent():
     """Create and configure the LangChain agent"""
     
     Config.validate()
@@ -200,39 +201,45 @@ def create_agent():
         TermMatcherTool()
     ]
     
+    # creating fresh memory instance 
+    fresh_memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True
+    )
+
     # prompt engineering for the agent
     system_prompt = """
     You are an expert medical data mapper specializing in NCIT (National Cancer Institute Thesaurus) terminology.
     Your job is to help map raw medical data values to standardized NCIT terms and codes. 
     
-    Background: 
-    - In the NCI Thesaurus and associated caDSR (Cancer Data Standards Registry and Repository), Common Data Elements (CDEs) are structured data definitions that ensure standardized data collection and interoperability across cancer research studies. 
-    - Every CDE is structured to be represented by a term name and a code. It also contains a set of permissible values.  
-    - Every component of the CDE may be linked to an overarching biological or medical Concept 
+    IMPORTANT: Focus ONLY on the current input. Do not reference previous queries or results.
 
-    Input:
-    As an input you might receive an NCIT code (starting with C like C8460), an NCIT term name (like Acute Myeloid Leukemia) or a permissible value (M0). 
+    Available Tools:
+    - term_matcher: Find exact matches for term names like "Prostate" or "Lung Cancer". Stop here if a match is found.
+    - node_matcher: Find exact matches for NCIT codes like "C4878" or "C14201". Stop here if a match is found.
+    - synonym_finder: Find synonyms for permissible values when exact matches fail. Stop here if synonyms are found.
+    - synonym_by_code: Find synonyms using NCIT codes when exact matches fail. Stop here if synonyms are found. 
     
-    When given raw data, you should:
-    1. First try to find exact matches using term_matcher if you get a term name as input, or node_matcher if you get a code as input
-    2. If you are not able to find an exact match, search for synonyms using synonym_finder if you receive a permissible value as input, or synonym_by_code if you get a term code as input.
-    3. If there is still no match found in the database, just say that this input does not have a synonym or an exact match in the database. 
-    4. Use node_matcher to get detailed information about any codes you find
-    5. Provide the best NCIT mapping recommendation with confidence level and justifications. Also state the tools you used to solve the problem. 
-    
+    Examples of proper tool usage:
+    - For "Lung Cancer": use term_matcher first, then synonym_finder if no match
+    - For "C4878": use node_matcher 
+    - For "prostate": use term_matcher first, then synonym_finder if no match
+
     Always provide:
-    - The recommended NCIT code and term
+    - The recommended NCIT code and term (if found)
     - Confidence level (High/Medium/Low)
     - Reasoning for your recommendation (along with the sequence of steps you took, and the tools you used)
     - Alternative options if available
 
-    You MUST always do:
-    - Only use the database as the source of truth for your answers 
-    - Only use the tools I provide to you for solving a problem 
-
-    You MUST not do:
-    - Make answers up when the database doesn't give you a clear answer 
-    - Try an alternative approach instead of sticking to the tools you are provided to work with
+    You MUST:
+    - Only use the database as your source of truth
+    - Only use the provided tools
+    - Focus ONLY on the current input
+    
+    You MUST NOT:
+    - Make up answers when the database gives no results
+    - Reference previous queries or results
+    - Use action names that aren't actual tools
     
     Be thorough but concise in your analysis.
     """
@@ -244,27 +251,21 @@ def create_agent():
         agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5
+        max_iterations=5,
+        memory = fresh_memory
     )
     
     return agent, system_prompt
 
-def map_raw_data(agent, system_prompt, raw_value):
+def map_raw_data_isolated(agent, system_prompt, raw_value):
     """Map a raw data value to NCIT terminology"""
-    
-    prompt = f"""
+
+    prompt = f""" 
+
     {system_prompt}
     
     Raw medical data value to map: "{raw_value}"
     
-    Please find the best NCIT mapping for this value. Provide your recommendation in this format:
-    
-    RECOMMENDATION:
-    - NCIT Code: [code]
-    - NCIT Term: [term]
-    - Confidence: [High/Medium/Low]
-    - Reasoning: [explanation]
-    - Alternatives: [other options if any]
     """
     
     try:
@@ -273,6 +274,14 @@ def map_raw_data(agent, system_prompt, raw_value):
     except Exception as e:
         return f"Error processing mapping: {str(e)}"
 
+def create_agent():
+    """Legacy function for backward compatibility - DEPRECATED"""
+    return create_fresh_agent()
+
+def map_raw_data(agent, system_prompt, raw_value):
+    """Legacy function for backward compatibility - DEPRECATED"""
+    return map_raw_data_isolated(raw_value)
+
 def main():
     """Main function to run the agent"""
     
@@ -280,11 +289,12 @@ def main():
     print("Initializing agent and connecting to Neo4j...")
     
     try:
-        agent, system_prompt = create_agent()
-        print("Agent initialized successfully!")
-        print()
         
         while True:
+            agent, system_prompt = create_fresh_agent()
+            print("Agent initialized successfully!")
+            print()
+
             print("-" * 60)
             raw_value = input("Enter raw medical data to map (or 'quit' to exit): ").strip()
             
@@ -300,7 +310,7 @@ def main():
             print(f"Mapping: '{raw_value}'")
             print("=" * 50)
             
-            result = map_raw_data(agent, system_prompt, raw_value)
+            result = map_raw_data_isolated(agent, system_prompt, raw_value)
             print(result)
             print()
             
