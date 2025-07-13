@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""
+LangChain Agent for Neo4j Knowledge Graph Querying
+Uses existing synonym finder and node matcher tools
+"""
+
+from langchain.agents import initialize_agent, AgentType
+from langchain_community.llms import OpenAI
+from config import Config
+from tools import (
+    SynonymFinderTool,
+    SynonymByCodeTool,
+    NodeMatcherTool,
+    TermMatcherTool,
+)
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def create_agent():
+    """Create and configure the LangChain agent"""
+    
+    Config.validate()
+    
+    # Initialize LLM
+    llm = OpenAI(temperature=0, model_name="gpt-3.5-turbo-instruct")
+    
+    # adding tools
+    tools = [
+        SynonymFinderTool(),
+        SynonymByCodeTool(),
+        NodeMatcherTool(),
+        TermMatcherTool()
+    ]
+    
+    # prompt engineering for the agent
+    system_prompt = """
+    You are an expert medical data mapper specializing in NCIT (National Cancer Institute Thesaurus) terminology.
+    Your job is to help map raw medical data values to standardized NCIT terms and codes. 
+    
+    Background: 
+    - In the NCI Thesaurus and associated caDSR (Cancer Data Standards Registry and Repository), Common Data Elements (CDEs) are structured data definitions that ensure standardized data collection and interoperability across cancer research studies. 
+    - Every CDE is structured to be represented by a term name and a code. It also contains a set of permissible values.  
+    - Every component of the CDE may be linked to an overarching biological or medical Concept 
+
+    Input:
+    As an input you might receive an NCIT code (starting with C like C8460), an NCIT term name (like Acute Myeloid Leukemia) or a permissible value (M0). 
+    
+    When given raw data, you should:
+    1. First try to find exact matches using term_matcher if you get a term name as input, or node_matcher if you get a code as input
+    2. If you are not able to find an exact match, search for synonyms using synonym_finder if you receive a permissible value as input, or synonym_by_code if you get a term code as input.
+    3. If there is still no match found in the database, just say that this input does not have a synonym or an exact match in the database. 
+    4. Use node_matcher to get detailed information about any codes you find
+    5. Provide the best NCIT mapping recommendation with confidence level and justifications. Also state the tools you used to solve the problem. 
+    
+    Always provide:
+    - The recommended NCIT code and term
+    - Confidence level (High/Medium/Low)
+    - Reasoning for your recommendation (along with the sequence of steps you took, and the tools you used)
+    - Alternative options if available
+
+    You MUST always do:
+    - Only use the database as the source of truth for your answers 
+    - Only use the tools I provide to you for solving a problem 
+
+    You MUST not do:
+    - Make answers up when the database doesn't give you a clear answer 
+    - Try an alternative approach instead of sticking to the tools you are provided to work with
+    
+    Be thorough but concise in your analysis.
+    """
+    
+    # Initialize agent
+    agent = initialize_agent(
+        tools=tools,
+        llm=llm,
+        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+        verbose=True,
+        handle_parsing_errors=True,
+        max_iterations=5
+    )
+    
+    return agent, system_prompt
+
+def map_raw_data(agent, system_prompt, raw_value):
+    """Map a raw data value to NCIT terminology"""
+    
+    prompt = f"""
+    {system_prompt}
+    
+    Raw medical data value to map: "{raw_value}"
+    
+    Please find the best NCIT mapping for this value. Provide your recommendation in this format:
+    
+    RECOMMENDATION:
+    - NCIT Code: [code]
+    - NCIT Term: [term]
+    - Confidence: [High/Medium/Low]
+    - Reasoning: [explanation]
+    - Alternatives: [other options if any]
+    """
+    
+    try:
+        response = agent.run(prompt)
+        return response
+    except Exception as e:
+        return f"Error processing mapping: {str(e)}"
+
