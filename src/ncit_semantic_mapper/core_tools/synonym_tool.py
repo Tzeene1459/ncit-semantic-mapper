@@ -3,15 +3,18 @@ Simple Synonym Finder - Cancer Knowledge Graph
 Fetches all synonym data for a given term, code or permissible value
 """
 
-from neo4j import GraphDatabase
 import os
+from ..config import Config
+from neo4j import GraphDatabase
 
 
 class get_synonyms:
     """
     Get all synonym data for a given input term or permissible value
     """
-    def __init__(self, uri, username, password):
+    def __init__(self, uri = Config.NEO4J_URI,
+                 username = Config.NEO4J_USERNAME,
+                 password = Config.NEO4J_PASSWORD):
         """Initialize connection to Neo4j"""
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         print("Connected to database")

@@ -4,12 +4,15 @@ Fetches exact matches for any term, code, label or concept
 """
 from neo4j import GraphDatabase
 import os
+from ..config import Config
 
 class get_node_match:
     """
     Get full node details for an exact match
     """
-    def __init__(self, uri, username, password):
+    def __init__(self, uri = Config.NEO4J_URI,
+                 username = Config.NEO4J_USERNAME,
+                 password = Config.NEO4J_PASSWORD):
         """Initialize connection to Neo4j"""
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         print("Connected to database")
