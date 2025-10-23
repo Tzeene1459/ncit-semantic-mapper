@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kg-toolkit"
+version = "0.1.0"
+description = "A semantic mapping and retrieval toolkit for NCIT and caDSR"
+readme = "README.md"
+authors = [{ name = "Tazeen Shaukat" }]
+dependencies = [
+    "streamlit>=1.30.0",
+    "pandas>=2.0.0",
+    "neo4j>=5.15.0",
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "openai>=1.0.0",
+    "requests>=2.31.0",
+    "pytest>=8.0.0"
+]
+
+[tool.setuptools.packages.find]
+# Tell setuptools to look for packages inside src/
+where = ["src"]
+
+[project.scripts]
+# Optional command-line shortcut; will call main() inside your Streamlit file
+kg-toolkit = "kg_toolkit.streamlit_multipage_app:main"

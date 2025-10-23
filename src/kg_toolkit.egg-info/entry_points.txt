@@ -1,0 +1,2 @@
+[console_scripts]
+kg-toolkit = kg_toolkit.streamlit_multipage_app:main

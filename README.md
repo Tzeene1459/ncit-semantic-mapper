@@ -1,49 +1,224 @@
-_This repo is under construction._
+# Neo4j Knowledge Graph Toolkit
 
-# SI Tamer
+A Python toolkit (work in progress) for semantic mapping and querying of medical terminology using Neo4j graph databases, specifically designed for working with caDSR (Cancer Data Standards Repository) and NCIT (NCI Thesaurus) data.
 
-SI (Semantic Infrastructure) Tamer is a developing set of Retrieval Augmented Generation (RAG) tools for querying a custom graph-based vector store that aggregates data elements from the NCI Cancer Data Standards Repository ([caDSR](https://cadsr.cancer.gov)) and the NCI Thesaurus ([NCIT](https://evsexplore.semantics.cancer.gov)).
+## Overview
 
-The tools are based on [LangChain](https://python.langchain.com), including Neo4j vendor-contributed "[GraphRAG](https://neo4j.com/docs/neo4j-graphrag-python/current/index.html)" components.
+This toolkit provides a modular foundation for automated semantic search and mapping across NCI's semantic infrastructure content. It enables mapping of raw medical data values to standardized NCIT terms and codes through exact matching, synonym finding, and AI-powered semantic analysis.
 
-## Rationale and Purpose
+## Related Project
 
-Cancer data submissions to large repositories come from diverse projects and institutions. Such data may be created under different standards, or include idiosyncratic, project-specific values and variables. Preparing such data for inclusion in a [FAIR](https://fairsharing.org/) repository often requires mapping and matching incoming data to equivalent concepts and terminologies into the broad NCI standards represented by caDSR and NCIT. These resources are large (caDSR includes over 70k active common data elements (CDEs), NCIT defines over 100k concepts) and unwieldly to search manually.
+This toolkit is part of the broader [SI Tamer](https://github.com/CBIIT/si-tamer) ecosystem - a developing set of Retrieval Augmented Generation (RAG) tools for querying custom graph-based vector stores that aggregate data from caDSR and NCIT.
 
-The SI Tamer toolkit together with a local graph database of caDSR and NCIt entities are intended to provide a modular foundation for automated and AI-driven [semantic search](https://cloud.google.com/discover/what-is-semantic-search?hl=en) across NCI's semantic infrastructure content. SI Tamer will be suitable for building semantic search components that can be incorporated into so-called "schema matching" packages such as [BDIKit](https://bdi-kit.readthedocs.io/stable/) and SME-friendly user interfaces.
+## Features
 
-## Graph Vector Store
+- **Exact Term Matching**: Find precise matches for NCIT codes and term names
+- **Synonym Discovery**: Locate synonyms for permissible values and NCIT codes
+- **Semantic Search with Embeddings**: Search embedding based semantic matches for permissible values and NCIT terms
+- **LangChain and LLM Integration**: AI-powered semantic mapping using OpenAI models used as an Agent
+- **Modular Architecture**: Separate tools for different types of queries
+- **Environment-based Configuration**: Secure credential management
+- **Streamlit Interface**: Run interactive demos or prototype visual workflows (new release)
+- **Python Package Architecture**: Fully installable with pip install -e . for local use
 
-We use [Neo4j](https://neo4j.com) (Community Edition v5.20) as the basis for our store. Serialized representations of [caDSR](https://cadsr.nci.nih.gov/ftp/caDSR_Downloads/CDE/XML/) and [NCIt](https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/) are extracted and loaded.
+## Project Structure
 
-The knowledge structure of the graph is under development. Currently it preserves the caDSR entities that are created and linked to each Common Data Element according to the [ISO 1179 metadata standard](https://wiki.nci.nih.gov/spaces/caDSR/pages/10861397/caDSR+and+ISO+11179). CDEs as well as Value Domains and Permissible Values are present and vector-searchable in the database. NCIT Concepts ([OWL](https://linkeddatatools.com/introducing-rdfs-owl/) classes) are present and linked with caDSR entities that reference them.
+```
+kg-toolkit/
+├── src/
+│   └── kg_toolkit/
+│       ├── __init__.py
+│       ├── pages/                     # Streamlit UI pages
+│       ├── utils/                     # Common data handling utilities
+│       ├── exact_match.py             # Exact node matching
+│       ├── semantic_retrievers.py     # Embedding-based retrieval
+│       ├── synonym_tool.py            # Synonym search logic
+│       ├── llm_agent_4o.py            # AI mapping agent using LangChain
+│       ├── streamlit_multipage_app.py # Interactive Streamlit app
+│       └── tests/
+├── pyproject.toml
+├── requirements.txt
+├── README.md
+├── schema.png
+└── .gitignore
 
-![SI Tamer graph schema](/schema.png)
+```
 
-|Node Label | Entity Name | Vector Index Name |
-|---|---|---|
-| CDE | Common Data Element | `cdeIndex` |
-| DEC | Data Element Concept | - |
-| NCIT | NCI Thesaurus Concept | `ncitIndex` |
-| OC | Object Class | - |
-| PR | Property (Attribute) | - |
-| PV | Permissible Value | `pvIndex` |
-| VDM | Value Domain | `vdmIndex` |
+## Core Components
+
+### `exact_match.py`
+Provides exact matching capabilities for NCIT nodes in the knowledge graph.
+
+**Key Features:**
+- Match nodes by NCIT code (e.g., "C4878")
+- Match nodes by exact term name (e.g., "Lung Carcinoma")
+- Retrieve comprehensive node information including definitions and embeddings
+- Pattern-based partial searching
+
+**Main Classes:**
+- `get_node_match`: Primary class for exact node matching operations
+
+### `synonym_tool.py` 
+Handles synonym discovery for permissible values and NCIT concepts.
+
+**Key Features:**
+- Find synonyms for permissible values (PV → NCIT → SYN path)
+- Find synonyms using NCIT codes (NCIT → SYN relationship)
+- Support for both term-based and code-based synonym searches
+
+**Main Classes:**
+- `get_synonyms`: Primary class for synonym finding operations
+
+### `semantic_retrievers.py`
+Provides semantic matching capabilities for NCIT nodes and PV nodes in the knowledge graph.
+This logic is inspired by the original [SI Tamer](https://github.com/CBIIT/si-tamer) toolset. 
+
+**Key Features:**
+- Turn PV or NCIT term into openAI embedding
+- Match nodes by similarity search using embeddings metadata against the input embedding 
+- Match nodes using definitions 
+- Retrieve comprehensive node information including all metadata
+- Rank results based on similarity scores
+
+
+**Main Classes:**
+- `SemanticSearcher`: Primary class for semantic matching operations for both PVs and NCIT terms
+
+### `llm_agent.py`
+LangChain-powered intelligent agent for semantic mapping with AI reasoning.
+
+**Key Features:**
+- Multi-tool orchestration for comprehensive semantic mapping
+- OpenAI GPT-4o integration for intelligent decision making
+- Structured output with confidence levels and reasoning
+- Environment-based credential management
+
+
+**Tool Classes:**
+- `SynonymFinderTool`: LangChain wrapper for synonym finding
+- `SynonymByCodeTool`: Code-based synonym discovery
+- `NodeMatcherTool`: Exact node matching by NCIT code
+- `TermMatcherTool`: Exact node matching by term name
+- `SemanticPVSearchTool`: Semantic search using PV embedding
+- `SemanticNCITSearchTool`: Semantic search using NCIT term embedding
+- `SemanticCDEDefinitionTool`: Semantic search for finding CDEs by searching definitions using semantic similarity. (new release)
+
+### `streamlit_multipage_app.py`
+Streamlit-based interactive demo interface for testing and visualization.
+
+Run via:
+```bash
+streamlit run src/kg_toolkit/streamlit_multipage_app.py
+```
+
+## Database Schema
+
+The toolkit works with a Neo4j graph database containing the following node types:
+
+| Node Label | Description | Vector Index |
+|------------|-------------|--------------|
+| NCIT | NCI Thesaurus Concept | ncitIndex |
+| PV | Permissible Value | pvIndex |
 | SYN | NCI Metathesaurus Synonym | - |
+| CDE | Common Data Element | cdeIndex |
+| VDM | Value Domain | vdmIndex |
 
-Each of these node types also has node label `:Term`. Term nodes may have the 
-following properties:
+### Node Properties
 
-|Property|Description|
-|---|---|
-|term|Title, term, or value|
-|code|ID within the source terminology (e.g., CDE ID, Concept Code|
-|version|Version number within the source terminology|
-|definition|Definition (if provided)|
-|openai_embedding|Vector embedding (`text-embedding-ada-002`)of definition|
-|context|caDSR context or synonym source terminology|
-|md5|MD5 hash of definition text|
-|id|MD5 hash of definition text (nodes with embedding properties)|
+| Property | Description |
+|----------|-------------|
+| `term` | Title, term, or value |
+| `code` | ID within source terminology |
+| `definition` | Definition text |
+| `openai_embedding` | Vector embedding of definition |
+| `type` | Node classification |
+
+## Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone <your-repository-url>
+   cd kg-toolkit
+   ```
+
+2. **Create virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+    pip install -r requirements.txt
+   ```
 
 
-ELT scripts for building the database are found in [/python/data_utils](/python/data_utils).
+3. **Install the package locally:**
+   ```bash
+    pip install -e .
+   ```
+This makes the package available for import:
+```bash
+   from kg_toolkit.semantic_retrievers import SemanticRetriever
+```
+
+
+## Configuration
+
+Set the following environment variables:
+
+```bash
+# OpenAI Configuration
+export OPENAI_API_KEY="your-openai-api-key"
+
+# Neo4j Configuration  
+export NEO4J_URI="bolt://your-neo4j-server:7687"
+export NEO4J_USERNAME="neo4j"
+export NEO4J_PASSWORD="your-password"
+```
+
+**Windows:**
+```cmd
+setx OPENAI_API_KEY "your-openai-api-key"
+setx NEO4J_URI "bolt://your-neo4j-server:7687"
+setx NEO4J_USERNAME "neo4j"
+setx NEO4J_PASSWORD "your-password"
+```
+
+## Usage example
+
+### Connection Test
+```bash
+python tests/connection_test.py
+```
+
+### Individual Tool Tests
+```bash
+python tests/test_synonyms.py
+python tests/test_exact_match.py
+```
+
+### Run Streamlit App
+```bash
+streamlit run src/kg_toolkit/streamlit_multipage_app.py
+```
+
+### Run Agent
+```bash
+python src/kg_toolkit/llm_agent_4o.py
+```
+
+### Import in Python
+```bash
+from kg_toolkit.synonym_tool import SynonymFinder
+from kg_toolkit.semantic_retrievers import SemanticSearcher
+```
+
+## Related Resources
+
+- [SI Tamer Main Repository](https://github.com/CBIIT/si-tamer)
+- [caDSR (Cancer Data Standards Repository)](https://cadsr.cancer.gov)
+- [NCI Thesaurus (NCIT)](https://evsexplore.semantics.cancer.gov)
+- [LangChain Documentation](https://python.langchain.com)
+- [Neo4j Documentation](https://neo4j.com/docs/)
+
